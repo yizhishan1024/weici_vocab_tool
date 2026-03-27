@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>维词抓取与生词本生成器</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="card">
+        <h1>维词抓取与生词本生成器</h1>
+        <p class="hint">抓取来源：1299172402/weici（docs/2）</p>
+
+        <div class="toolbar">
+          <button id="loadBtn">加载词库</button>
+          <button id="refreshBtn">强制刷新词库</button>
+          <span id="stats"></span>
+        </div>
+
+        <div class="filter-row">
+          <input id="searchInput" placeholder="筛词：输入英文拼写/中文释义/英文释义" />
+          <select id="rangeSelect" aria-label="筛词范围">
+            <option value="all">筛词范围：全部新词</option>
+            <option value="notebook">筛词范围：生词表</option>
+            <option value="phrase">筛词范围：短语</option>
+            <option value="special">筛词范围：特殊词汇</option>
+          </select>
+        </div>
+
+        <div id="letterFilters" class="letter-filters"></div>
+      </section>
+
+      <section class="grid">
+        <article class="card flashcard-panel">
+          <div class="flashcard-meta">
+            <h2>筛词卡片</h2>
+            <p id="progressText" class="hint">准备加载词库...</p>
+          </div>
+
+          <div class="flashcard-wrap">
+            <div class="flashcard" id="flashcard">
+              <p id="emptyState" class="empty-state">当前范围内没有可显示的单词。</p>
+
+              <div id="cardContent" class="card-content" hidden>
+                <p id="cardCategory" class="card-category"></p>
+                <h3 id="cardWord" class="card-word"></h3>
+                <p id="cardIpa" class="card-ipa"></p>
+                <div id="cardMeanings" class="card-meanings"></div>
+              </div>
+            </div>
+
+            <div class="flashcard-actions">
+              <button id="addBtn">加入生词本</button>
+              <button id="skipBtn" class="ghost">跳过</button>
+            </div>
+
+            <p class="shortcut-hint">快捷键：`A` 或 `Enter` 加入生词本，`S` 或空格跳过</p>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>生词本</h2>
+          <p id="selectedCount">已选 0 个单词</p>
+          <div class="toolbar compact">
+            <button id="clearSelectedBtn" class="ghost">清空生词本</button>
+          </div>
+
+          <div class="export-box">
+            <label for="modeSelect">导出模式</label>
+            <select id="modeSelect">
+              <option value="zh">仅中文释义</option>
+              <option value="bilingual" selected>中英双释义</option>
+              <option value="en">纯英文</option>
+            </select>
+
+            <label for="typeSelect">导出格式</label>
+            <select id="typeSelect">
+              <option value="docx" selected>DOCX 文档</option>
+              <option value="txt">TXT 文本</option>
+            </select>
+
+            <button id="exportBtn">生成词汇本文件</button>
+          </div>
+
+          <ul id="selectedList" class="selected-list"></ul>
+        </article>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
