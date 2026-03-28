@@ -42,3 +42,6 @@ bash start.sh
 
 Render 配置文件：
 - [render.yaml](/Users/andy/Documents/weici_vocab_tool/render.yaml)
+
+项目使用与更改清单：
+- [MAINTENANCE_GUIDE.md](/Users/andy/Documents/weici_vocab_tool/MAINTENANCE_GUIDE.md)

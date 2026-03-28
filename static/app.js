@@ -1,16 +1,30 @@
 const state = {
   words: [],
   selectedMap: new Map(),
-  activeLetter: "all",
-  currentIndex: 0,
+  notebookEntries: [],
+  activeView: "home",
+  studyIndex: 0,
+  notebookIndex: 0,
+  lastView: "home",
+  studyRange: "all",
+  drawerOpen: false,
+  settingsOpen: false,
+  autoPlayAudio: true,
+  preferredVoice: null,
 };
 
-const STORAGE_KEY = "weici_vocab_selected_words";
-const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const SETTINGS_STORAGE_KEY = "weici_settings_v1";
+
 const CATEGORY_LABELS = {
   phrase: "短语",
   special: "特殊词汇",
 };
+const STUDY_RANGES = [
+  { value: "all", label: "全部新词" },
+  { value: "phrase", label: "短语" },
+  { value: "special", label: "特殊词汇" },
+  ...Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map((letter) => ({ value: letter, label: letter })),
+];
 
 const $ = (id) => document.getElementById(id);
 
@@ -18,24 +32,43 @@ function renderStats(text) {
   $("stats").textContent = text;
 }
 
-function getIpa(word) {
-  return word.ipa || word.ipa_us || word.ipa_uk || "";
+function renderToday() {
+  const now = new Date();
+  $("todayText").textContent = now.toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  });
 }
 
-function getPos(word) {
-  return word.pos || "";
+function loadSettings() {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.autoPlayAudio === "boolean") {
+      state.autoPlayAudio = parsed.autoPlayAudio;
+    }
+  } catch (_) {
+    // no-op
+  }
 }
 
-function formatWordLabel(word) {
-  return `${word.word}${getPos(word) ? ` (${getPos(word)})` : ""}`;
+function saveSettings() {
+  try {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        autoPlayAudio: state.autoPlayAudio,
+      }),
+    );
+  } catch (_) {
+    // no-op
+  }
 }
 
-function getCategoryLabel(category) {
-  if (CATEGORY_LABELS[category]) return CATEGORY_LABELS[category];
-  return category || "未分类";
-}
-
-function normalizeSavedWord(word) {
+function normalizeWord(word) {
   if (!word || !word.word) return null;
   return {
     ...word,
@@ -43,125 +76,124 @@ function normalizeSavedWord(word) {
   };
 }
 
-function saveSelected() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(state.selectedMap.values())));
+function getIpa(word) {
+  return word.audio ? word.ipa || word.ipa_us || word.ipa_uk || "" : word.ipa || word.ipa_us || word.ipa_uk || "";
 }
 
-function loadSavedSelected() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    const items = list.map(normalizeSavedWord).filter(Boolean);
-    state.selectedMap = new Map(items.map((item) => [item.word, item]));
-  } catch (_) {
-    state.selectedMap = new Map();
+function getAudio(word) {
+  return word.audio || word.audio_us || word.audio_uk || "";
+}
+
+function getCategoryLabel(category) {
+  if (CATEGORY_LABELS[category]) return CATEGORY_LABELS[category];
+  return category || "新词";
+}
+
+async function saveSelected() {
+  const entries = [...state.notebookEntries];
+  await fetch("/api/notebook", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entries }),
+  });
+}
+
+async function loadNotebook() {
+  const resp = await fetch("/api/notebook");
+  if (!resp.ok) throw new Error("生词本加载失败");
+  const data = await resp.json();
+  const items = (data.entries || []).map(normalizeWord).filter(Boolean);
+  state.notebookEntries = items;
+  state.selectedMap = new Map(items.map((item) => [item.word, item]));
+}
+
+function getStudyWords() {
+  if (state.studyRange === "all") return state.words;
+  return state.words.filter((word) => word.category === state.studyRange);
+}
+
+function getNotebookWords() {
+  return [...state.notebookEntries].sort((a, b) => a.word.localeCompare(b.word));
+}
+
+function getCurrentStudyWord() {
+  const words = getStudyWords();
+  if (!words.length) return null;
+  if (state.studyIndex >= words.length) state.studyIndex = 0;
+  if (state.studyIndex < 0) state.studyIndex = 0;
+  return words[state.studyIndex];
+}
+
+function getCurrentNotebookWord() {
+  const words = getNotebookWords();
+  if (!words.length) return null;
+  if (state.notebookIndex >= words.length) state.notebookIndex = 0;
+  if (state.notebookIndex < 0) state.notebookIndex = 0;
+  return words[state.notebookIndex];
+}
+
+function renderView() {
+  const isHome = state.activeView === "home";
+  const isStudy = state.activeView === "study";
+  const isNotebook = state.activeView === "notebook";
+  const enteringImmersive = state.lastView === "home" && !isHome;
+
+  document.body.classList.toggle("immersive-mode", !isHome);
+  $("homePanel").hidden = !isHome;
+  $("workspace").hidden = isHome;
+  $("studyPanel").hidden = !isStudy;
+  $("notebookPanel").hidden = !isNotebook;
+  $("studyPanel").style.display = isStudy ? "flex" : "none";
+  $("notebookPanel").style.display = isNotebook ? "flex" : "none";
+  $("studyDrawer").hidden = !isStudy || !state.drawerOpen;
+  $("settingsDrawer").hidden = !state.settingsOpen;
+  $("settingsBtn").setAttribute("aria-expanded", state.settingsOpen ? "true" : "false");
+  $("showStudyBtn").classList.toggle("active", isStudy);
+  $("showNotebookBtn").classList.toggle("active", isNotebook);
+
+  if (enteringImmersive) {
+    $("workspace").classList.remove("animate-in");
+    window.requestAnimationFrame(() => {
+      $("workspace").classList.add("animate-in");
+    });
   }
+
+  state.lastView = state.activeView;
 }
 
-function renderSelectedList() {
-  const selected = Array.from(state.selectedMap.values()).sort((a, b) => a.word.localeCompare(b.word));
-  $("selectedCount").textContent = `已选 ${selected.length} 个单词`;
-
-  const ul = $("selectedList");
-  ul.innerHTML = "";
-  for (const word of selected) {
-    const li = document.createElement("li");
-    li.textContent = `${formatWordLabel(word)} ${getIpa(word) ? `[${getIpa(word)}]` : ""} - ${buildMeaningPreview(word)}`;
-    ul.appendChild(li);
-  }
+function renderSettings() {
+  $("autoPlayToggle").checked = state.autoPlayAudio;
 }
 
-function renderLetterFilters() {
-  const container = $("letterFilters");
-  const range = $("rangeSelect").value;
+function renderDrawer() {
+  const container = $("drawerRangeList");
   container.innerHTML = "";
 
-  if (range !== "all") return;
-
-  const createButton = (label, value) => {
+  for (const item of STUDY_RANGES) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = `letter-btn${state.activeLetter === value ? " active" : ""}`;
-    btn.textContent = label;
+    btn.className = `drawer-item${state.studyRange === item.value ? " active" : ""}`;
+    btn.textContent = item.label;
     btn.addEventListener("click", () => {
-      state.activeLetter = value;
-      state.currentIndex = 0;
-      renderLetterFilters();
-      renderCard();
+      state.studyRange = item.value;
+      state.studyIndex = 0;
+      renderDrawer();
+      renderStudyCard();
+      maybeAutoPlay(getCurrentStudyWord());
     });
-    return btn;
-  };
-
-  container.appendChild(createButton("全部字母", "all"));
-  for (const letter of LETTERS) {
-    container.appendChild(createButton(letter, letter));
+    container.appendChild(btn);
   }
 }
 
-function buildMeaningPreview(word) {
-  const meanings = (word.meanings || []).slice(0, 2);
-  if (meanings.length) {
-    return meanings
-      .map((meaning) => {
-        const pos = (meaning.pos || "").trim();
-        const zh = (meaning.zh || "").trim();
-        const en = (meaning.en || "").trim();
-        const body = zh || en;
-        return `${pos ? `${pos} ` : ""}${body}`.trim();
-      })
-      .filter(Boolean)
-      .join("；");
-  }
-
-  return word.first_zh || word.first_en || "";
-}
-
-function matchesSearch(word, keyword) {
-  if (!keyword) return true;
-
-  const haystack = [
-    word.word,
-    word.pos,
-    getIpa(word),
-    word.first_zh,
-    word.first_en,
-    ...(word.meanings || []).flatMap((meaning) => [meaning.pos, meaning.zh, meaning.en]),
-  ];
-
-  return haystack.filter(Boolean).some((item) => item.toLowerCase().includes(keyword));
-}
-
-function getFilteredWords() {
-  const keyword = $("searchInput").value.trim().toLowerCase();
-  const range = $("rangeSelect").value;
-
-  let pool = state.words;
-  if (range === "notebook") {
-    pool = Array.from(state.selectedMap.values());
-  } else if (range !== "all") {
-    pool = pool.filter((word) => word.category === range);
-  } else if (state.activeLetter !== "all") {
-    pool = pool.filter((word) => word.category === state.activeLetter);
-  }
-
-  return pool.filter((word) => matchesSearch(word, keyword));
-}
-
-function getCurrentWord() {
-  const words = getFilteredWords();
-  if (!words.length) return null;
-
-  if (state.currentIndex >= words.length) state.currentIndex = 0;
-  if (state.currentIndex < 0) state.currentIndex = 0;
-  return words[state.currentIndex];
-}
-
-function renderMeaningLines(word) {
-  const meanings = (word.meanings || []).slice(0, 2);
-  const container = $("cardMeanings");
+function renderMeaningBlock(containerId, word) {
+  const container = $(containerId);
   container.innerHTML = "";
+  container.classList.remove("card-swap");
 
-  const rows = meanings.length ? meanings : [{ pos: word.pos, zh: word.first_zh, en: word.first_en }];
+  const rows = (word.meanings && word.meanings.length)
+    ? word.meanings.slice(0, 2)
+    : [{ pos: word.pos, zh: word.first_zh, en: word.first_en }];
+
   for (const meaning of rows) {
     const row = document.createElement("div");
     row.className = "meaning-row";
@@ -189,80 +221,186 @@ function renderMeaningLines(word) {
     row.appendChild(body);
     container.appendChild(row);
   }
+
+  window.requestAnimationFrame(() => {
+    container.classList.add("card-swap");
+  });
 }
 
-function renderCard() {
-  const words = getFilteredWords();
-  const current = getCurrentWord();
-  const range = $("rangeSelect").value;
-  const progress = words.length ? `当前第 ${state.currentIndex + 1} / ${words.length} 个` : "当前范围内没有单词";
+function playWordAudio(word) {
+  if (!word) return;
+  const audioUrl = getAudio(word);
+  if (audioUrl) {
+    const audio = new Audio(audioUrl);
+    audio.play().catch(() => {
+      speakFallback(word.word);
+    });
+    return;
+  }
+  speakFallback(word.word);
+}
 
-  $("progressText").textContent = `${progress}${range === "notebook" ? " · 生词表模式" : ""}`;
+function maybeAutoPlay(word) {
+  if (!state.autoPlayAudio || !word) return;
+  playWordAudio(word);
+}
 
+function pickPreferredVoice() {
+  if (!("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  const preferredVoice = voices.find((voice) => /en-US/i.test(voice.lang) && /Samantha|Alex|Daniel|Google US English/i.test(voice.name))
+    || voices.find((voice) => /en-US/i.test(voice.lang))
+    || voices.find((voice) => /en-GB/i.test(voice.lang))
+    || null;
+  state.preferredVoice = preferredVoice;
+  return preferredVoice;
+}
+
+function speakFallback(text) {
+  if (!("speechSynthesis" in window) || !text) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  const preferredVoice = state.preferredVoice || pickPreferredVoice();
+  if (preferredVoice) {
+    utterance.voice = preferredVoice;
+    utterance.lang = preferredVoice.lang;
+  } else {
+    utterance.lang = "en-US";
+  }
+  utterance.rate = 0.92;
+  window.speechSynthesis.speak(utterance);
+}
+
+function warmupSpeech() {
+  if (!("speechSynthesis" in window)) return;
+  pickPreferredVoice();
+  window.speechSynthesis.onvoiceschanged = () => {
+    pickPreferredVoice();
+  };
+}
+
+function renderStudyCard() {
+  const words = getStudyWords();
+  const current = getCurrentStudyWord();
+  const rangeLabel = STUDY_RANGES.find((item) => item.value === state.studyRange)?.label || "全部新词";
+  $("progressText").textContent = words.length ? `${rangeLabel} · 当前第 ${state.studyIndex + 1} / ${words.length} 个` : `${rangeLabel} · 当前没有可显示的新词`;
   $("emptyState").hidden = Boolean(current);
   $("cardContent").hidden = !current;
   $("addBtn").disabled = !current || state.selectedMap.has(current.word);
-  $("skipBtn").disabled = !current;
+  $("playAudioBtn").disabled = !current || !getAudio(current);
+  $("prevBtn").disabled = !current;
+  $("nextBtn").disabled = !current;
 
   if (!current) return;
 
   $("cardCategory").textContent = getCategoryLabel(current.category);
   $("cardWord").textContent = current.word;
   $("cardIpa").textContent = getIpa(current) ? `[${getIpa(current)}]` : "暂无音标";
-  renderMeaningLines(current);
+  renderMeaningBlock("cardMeanings", current);
 }
 
-function advanceCard() {
-  const words = getFilteredWords();
-  if (!words.length) {
-    state.currentIndex = 0;
-    renderCard();
-    return;
-  }
+function renderNotebookCard() {
+  const words = getNotebookWords();
+  const current = getCurrentNotebookWord();
+  $("selectedCount").textContent = words.length ? `已选 ${words.length} 个单词 · 当前第 ${state.notebookIndex + 1} / ${words.length} 个` : "生词本为空";
+  $("notebookEmptyState").hidden = Boolean(current);
+  $("notebookCardContent").hidden = !current;
+  $("removeBtn").disabled = !current;
+  $("notebookPlayAudioBtn").disabled = !current || !getAudio(current);
+  $("notebookPrevBtn").disabled = !current;
+  $("notebookNextBtn").disabled = !current;
+  $("exportBtn").disabled = !words.length;
 
-  state.currentIndex = (state.currentIndex + 1) % words.length;
-  renderCard();
+  if (!current) return;
+
+  $("notebookCategory").textContent = `生词本模式 · ${getCategoryLabel(current.category)}`;
+  $("notebookWord").textContent = current.word;
+  $("notebookIpa").textContent = getIpa(current) ? `[${getIpa(current)}]` : "暂无音标";
+  renderMeaningBlock("notebookMeanings", current);
+}
+
+function renderActiveView() {
+  renderView();
+  renderSettings();
+  renderDrawer();
+  renderStudyCard();
+  renderNotebookCard();
+}
+
+function moveStudy(delta) {
+  const words = getStudyWords();
+  if (!words.length) return;
+  state.studyIndex = (state.studyIndex + delta + words.length) % words.length;
+  renderStudyCard();
+  maybeAutoPlay(getCurrentStudyWord());
+}
+
+function moveNotebook(delta) {
+  const words = getNotebookWords();
+  if (!words.length) return;
+  state.notebookIndex = (state.notebookIndex + delta + words.length) % words.length;
+  renderNotebookCard();
+  maybeAutoPlay(getCurrentNotebookWord());
 }
 
 function addCurrentWord() {
-  const current = getCurrentWord();
+  const current = getCurrentStudyWord();
   if (!current || state.selectedMap.has(current.word)) return;
 
+  state.notebookEntries.push(current);
   state.selectedMap.set(current.word, current);
-  saveSelected();
-  renderSelectedList();
-  advanceCard();
+  renderNotebookCard();
+  saveSelected().catch(() => {
+    // no-op
+  });
+  moveStudy(1);
 }
 
-function skipCurrentWord() {
-  if (!getCurrentWord()) return;
-  advanceCard();
+function removeCurrentWord() {
+  const current = getCurrentNotebookWord();
+  if (!current) return;
+
+  state.notebookEntries = state.notebookEntries.filter((item) => item.word !== current.word);
+  state.selectedMap.delete(current.word);
+  const wordsAfter = getNotebookWords();
+  if (state.notebookIndex >= wordsAfter.length) {
+    state.notebookIndex = Math.max(0, wordsAfter.length - 1);
+  }
+  renderNotebookCard();
+  saveSelected().catch(() => {
+    // no-op
+  });
 }
 
 async function loadWords(refresh = false) {
-  renderStats("正在加载词库，请稍候...");
+  renderStats("正在加载本地词库，请稍候...");
   const resp = await fetch(`/api/words${refresh ? "?refresh=1" : ""}`);
   if (!resp.ok) throw new Error("词库加载失败");
 
   const data = await resp.json();
-  state.words = (data.words || []).map(normalizeSavedWord).filter(Boolean);
+  state.words = (data.words || []).map(normalizeWord).filter(Boolean);
 
-  for (const wordKey of Array.from(state.selectedMap.keys())) {
+  const refreshedNotebook = new Map();
+  const refreshedNotebookEntries = [];
+  for (const [wordKey, savedItem] of Array.from(state.selectedMap.entries())) {
     const found = state.words.find((item) => item.word === wordKey);
-    if (found) state.selectedMap.set(wordKey, found);
+    const item = found || savedItem;
+    refreshedNotebook.set(wordKey, item);
+    refreshedNotebookEntries.push(item);
   }
+  state.selectedMap = refreshedNotebook;
+  state.notebookEntries = refreshedNotebookEntries;
 
-  renderStats(`新词库 ${data.count} 条，原始词条 ${data.raw_count || data.count} 条，更新时间：${data.updated_at || "未知"}`);
-  state.currentIndex = 0;
-  renderLetterFilters();
-  renderSelectedList();
-  renderCard();
+  state.studyIndex = 0;
+  state.notebookIndex = 0;
+  renderStats(`本地词库 ${data.count} 条，原始词条 ${data.raw_count || data.count} 条，更新时间：${data.updated_at || "未知"}`);
+  renderActiveView();
 }
 
 async function exportNotebook() {
-  const entries = Array.from(state.selectedMap.values()).sort((a, b) => a.word.localeCompare(b.word));
+  const entries = getNotebookWords();
   if (!entries.length) {
-    alert("请先添加生词。");
+    alert("请先加入生词。");
     return;
   }
 
@@ -302,30 +440,60 @@ async function exportNotebook() {
   setTimeout(() => URL.revokeObjectURL(a.href), 800);
 }
 
+function enterView(view) {
+  state.activeView = view;
+  if (view === "study") {
+    state.studyIndex = 0;
+  }
+  if (view === "notebook") {
+    state.notebookIndex = 0;
+    state.drawerOpen = false;
+  }
+  renderActiveView();
+  const current = view === "study" ? getCurrentStudyWord() : getCurrentNotebookWord();
+  maybeAutoPlay(current);
+}
+
 function setupEvents() {
   $("loadBtn").addEventListener("click", () => loadWords(false).catch((e) => alert(e.message)));
   $("refreshBtn").addEventListener("click", () => loadWords(true).catch((e) => alert(e.message)));
-  $("searchInput").addEventListener("input", () => {
-    state.currentIndex = 0;
-    renderCard();
+
+  $("showStudyBtn").addEventListener("click", () => enterView("study"));
+  $("showNotebookBtn").addEventListener("click", () => enterView("notebook"));
+  $("backHomeBtn").addEventListener("click", () => enterView("home"));
+  $("notebookExitBtn").addEventListener("click", () => enterView("home"));
+  $("drawerToggleBtn").addEventListener("click", () => {
+    state.drawerOpen = !state.drawerOpen;
+    renderView();
   });
-  $("rangeSelect").addEventListener("change", () => {
-    if ($("rangeSelect").value !== "all") state.activeLetter = "all";
-    state.currentIndex = 0;
-    renderLetterFilters();
-    renderCard();
+  $("drawerCloseBtn").addEventListener("click", () => {
+    state.drawerOpen = false;
+    renderView();
+  });
+  $("settingsBtn").addEventListener("click", () => {
+    state.settingsOpen = !state.settingsOpen;
+    renderView();
+    renderSettings();
+  });
+  $("settingsCloseBtn").addEventListener("click", () => {
+    state.settingsOpen = false;
+    renderView();
+  });
+  $("autoPlayToggle").addEventListener("change", (event) => {
+    state.autoPlayAudio = event.target.checked;
+    saveSettings();
+    renderSettings();
   });
 
   $("addBtn").addEventListener("click", addCurrentWord);
-  $("skipBtn").addEventListener("click", skipCurrentWord);
+  $("playAudioBtn").addEventListener("click", () => playWordAudio(getCurrentStudyWord()));
+  $("prevBtn").addEventListener("click", () => moveStudy(-1));
+  $("nextBtn").addEventListener("click", () => moveStudy(1));
 
-  $("clearSelectedBtn").addEventListener("click", () => {
-    state.selectedMap.clear();
-    saveSelected();
-    state.currentIndex = 0;
-    renderSelectedList();
-    renderCard();
-  });
+  $("removeBtn").addEventListener("click", removeCurrentWord);
+  $("notebookPlayAudioBtn").addEventListener("click", () => playWordAudio(getCurrentNotebookWord()));
+  $("notebookPrevBtn").addEventListener("click", () => moveNotebook(-1));
+  $("notebookNextBtn").addEventListener("click", () => moveNotebook(1));
 
   $("exportBtn").addEventListener("click", () => exportNotebook().catch((e) => alert(e.message)));
 
@@ -333,22 +501,55 @@ function setupEvents() {
     const tag = event.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
 
-    if (event.key === "a" || event.key === "A" || event.key === "Enter") {
-      event.preventDefault();
-      addCurrentWord();
-    } else if (event.key === "s" || event.key === "S" || event.key === " ") {
-      event.preventDefault();
-      skipCurrentWord();
+    if (event.key === "Escape") {
+      if (state.settingsOpen) {
+        state.settingsOpen = false;
+        renderView();
+        return;
+      }
+      enterView("home");
+      return;
+    }
+
+    if (state.activeView === "study") {
+      if (event.key === "Tab") {
+        event.preventDefault();
+        state.drawerOpen = !state.drawerOpen;
+        renderView();
+      } else if (event.key === "a" || event.key === "A" || event.key === "Enter") {
+        event.preventDefault();
+        addCurrentWord();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        moveStudy(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        moveStudy(1);
+      }
+    } else if (state.activeView === "notebook") {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        moveNotebook(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        moveNotebook(1);
+      } else if (event.key === "Backspace" || event.key === "Delete") {
+        event.preventDefault();
+        removeCurrentWord();
+      }
     }
   });
 }
 
-loadSavedSelected();
 setupEvents();
-renderLetterFilters();
-renderSelectedList();
-renderCard();
-loadWords(false).catch((e) => {
-  renderStats("词库加载失败，请稍后重试");
-  alert(e.message);
-});
+loadSettings();
+renderToday();
+warmupSpeech();
+renderActiveView();
+Promise.resolve()
+  .then(() => loadNotebook())
+  .then(() => loadWords(false))
+  .catch((e) => {
+    renderStats("词库或生词本加载失败，请稍后重试");
+    alert(e.message);
+  });

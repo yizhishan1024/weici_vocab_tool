@@ -8,6 +8,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 import os
 from pathlib import Path
+import time
 from typing import List
 
 import requests
@@ -21,6 +22,8 @@ except Exception:  # pragma: no cover
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 CACHE_PATH = DATA_DIR / "words_cache.json"
+NOTEBOOK_DIR = DATA_DIR / "notebook"
+NOTEBOOK_PATH = NOTEBOOK_DIR / "selected_words.json"
 
 RAW_BASE = "https://raw.githubusercontent.com/1299172402/weici/master/docs/2"
 SOURCE_FILES = [f"weici_{ch}.md" for ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"] + ["weici_phrase.md"]
@@ -35,6 +38,8 @@ class WordEntry:
     category: str
     ipa_uk: str
     ipa_us: str
+    audio_uk: str
+    audio_us: str
     first_zh: str
     first_en: str
     source_path: str
@@ -84,6 +89,7 @@ def aggregate_words(words: List[WordEntry]) -> list[dict]:
                 break
 
         ipa = next((x.ipa_us for x in group if x.ipa_us), "") or next((x.ipa_uk for x in group if x.ipa_uk), "")
+        audio = next((x.audio_us for x in group if x.audio_us), "") or next((x.audio_uk for x in group if x.audio_uk), "")
         aggregated.append(
             {
                 "word": word,
@@ -92,6 +98,9 @@ def aggregate_words(words: List[WordEntry]) -> list[dict]:
                 "ipa": ipa,
                 "ipa_uk": next((x.ipa_uk for x in group if x.ipa_uk), ""),
                 "ipa_us": next((x.ipa_us for x in group if x.ipa_us), ""),
+                "audio": audio,
+                "audio_uk": next((x.audio_uk for x in group if x.audio_uk), ""),
+                "audio_us": next((x.audio_us for x in group if x.audio_us), ""),
                 "meanings": meanings,
                 "first_zh": meanings[0]["zh"] if meanings else "",
                 "first_en": meanings[0]["en"] if meanings else "",
@@ -139,6 +148,7 @@ class WeiciParser:
     first_sense_re = re.compile(r"^###\s*1\.(.*)$")
     bold_text_re = re.compile(r"\*\*([^*]+)\*\*")
     sense_en_re = re.compile(r"^英译\s+(.+?)\s*$")
+    audio_src_re = re.compile(r'<audio src="([^"]+)"')
 
     @classmethod
     def parse_markdown(cls, md_text: str, source_path: str) -> WordEntry | None:
@@ -151,6 +161,8 @@ class WeiciParser:
 
         ipa_uk = cls.extract_ipa(md_text, cls.uk_re)
         ipa_us = cls.extract_ipa(md_text, cls.us_re)
+        audio_uk = cls.extract_audio(md_text, "英音")
+        audio_us = cls.extract_audio(md_text, "美音")
         first_zh, first_en = cls.extract_first_sense(md_text)
 
         if not first_zh:
@@ -162,6 +174,8 @@ class WeiciParser:
             category=build_category(word, source_path),
             ipa_uk=ipa_uk,
             ipa_us=ipa_us,
+            audio_uk=audio_uk,
+            audio_us=audio_us,
             first_zh=first_zh,
             first_en=first_en,
             source_path=source_path,
@@ -173,6 +187,17 @@ class WeiciParser:
             value = (match.group(1) or "").strip()
             if value:
                 return value
+        return ""
+
+    @classmethod
+    def extract_audio(cls, md_text: str, label: str) -> str:
+        lines = md_text.splitlines()
+        for idx, raw_line in enumerate(lines):
+            if raw_line.strip().startswith(label):
+                for follow_line in lines[idx + 1 : idx + 6]:
+                    match = cls.audio_src_re.search(follow_line)
+                    if match:
+                        return build_audio_url(match.group(1))
         return ""
 
     @classmethod
@@ -226,9 +251,17 @@ class WeiciParser:
 
 def _download_one(file_name: str) -> tuple[str, str]:
     url = f"{RAW_BASE}/{file_name}"
-    resp = requests.get(url, timeout=40)
-    resp.raise_for_status()
-    return file_name, resp.text.replace("\r\n", "\n").replace("\r", "\n")
+    last_error = None
+    for attempt in range(3):
+        try:
+            resp = requests.get(url, timeout=40)
+            resp.raise_for_status()
+            return file_name, resp.text.replace("\r\n", "\n").replace("\r", "\n")
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.2 * (attempt + 1))
+    raise last_error
 
 
 def build_category(word: str, source_path: str) -> str:
@@ -241,11 +274,22 @@ def build_category(word: str, source_path: str) -> str:
     return "special"
 
 
+def build_audio_url(src: str) -> str:
+    cleaned = (src or "").strip()
+    if not cleaned:
+        return ""
+    if cleaned.startswith("http://") or cleaned.startswith("https://"):
+        return cleaned
+    if cleaned.startswith("./"):
+        cleaned = cleaned[2:]
+    return f"https://raw.githubusercontent.com/1299172402/weici/master/docs/2/{cleaned}"
+
+
 def _download_and_parse() -> List[WordEntry]:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     words: List[WordEntry] = []
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         futures = [pool.submit(_download_one, name) for name in SOURCE_FILES]
         for fut in as_completed(futures):
             file_name, text = fut.result()
@@ -264,6 +308,26 @@ def _write_cache(words: List[WordEntry]) -> None:
     CACHE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _load_notebook() -> list[dict]:
+    NOTEBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    if not NOTEBOOK_PATH.exists():
+        NOTEBOOK_PATH.write_text(json.dumps({"entries": []}, ensure_ascii=False, indent=2), encoding="utf-8")
+        return []
+
+    data = json.loads(NOTEBOOK_PATH.read_text(encoding="utf-8"))
+    return data.get("entries", [])
+
+
+def _write_notebook(entries: list[dict]) -> None:
+    NOTEBOOK_DIR.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "count": len(entries),
+        "entries": entries,
+    }
+    NOTEBOOK_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _load_cache() -> List[WordEntry]:
     if not CACHE_PATH.exists():
         return []
@@ -272,6 +336,8 @@ def _load_cache() -> List[WordEntry]:
     for x in data.get("words", []):
         if "category" not in x:
             x["category"] = build_category(x.get("word", ""), x.get("source_path", ""))
+        x.setdefault("audio_uk", "")
+        x.setdefault("audio_us", "")
         items.append(WordEntry(**x))
     return items
 
@@ -304,6 +370,21 @@ def api_words():
             "words": aggregated,
         }
     )
+
+
+@app.get("/api/notebook")
+def api_notebook():
+    entries = _load_notebook()
+    return jsonify({"count": len(entries), "entries": entries})
+
+
+@app.post("/api/notebook")
+def api_notebook_save():
+    payload = request.get_json(force=True, silent=True) or {}
+    entries = payload.get("entries", [])
+    cleaned = [item for item in entries if isinstance(item, dict) and item.get("word")]
+    _write_notebook(cleaned)
+    return jsonify({"count": len(cleaned), "entries": cleaned})
 
 
 @app.post("/api/export")

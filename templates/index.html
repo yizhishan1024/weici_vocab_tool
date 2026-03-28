@@ -7,36 +7,74 @@
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
+    <header class="topbar">
+      <p id="todayText" class="today-text"></p>
+      <button id="settingsBtn" class="settings-trigger ghost" type="button" aria-expanded="false" aria-controls="settingsDrawer">
+        设置
+      </button>
+    </header>
+
+    <aside id="settingsDrawer" class="settings-drawer" hidden>
+      <div class="settings-head">
+        <h2>设置</h2>
+        <button id="settingsCloseBtn" class="ghost" type="button">关闭</button>
+      </div>
+
+      <label class="settings-option" for="autoPlayToggle">
+        <div>
+          <strong>自动播放单词发音</strong>
+          <p>切换卡片或进入卡片模式时，自动朗读当前单词。</p>
+        </div>
+        <input id="autoPlayToggle" type="checkbox" />
+      </label>
+    </aside>
+
     <main class="container">
-      <section class="card">
-        <h1>维词抓取与生词本生成器</h1>
-        <p class="hint">抓取来源：1299172402/weici（docs/2）</p>
-
-        <div class="toolbar">
-          <button id="loadBtn">加载词库</button>
-          <button id="refreshBtn">强制刷新词库</button>
-          <span id="stats"></span>
+      <section class="card hero-card">
+        <div class="hero-head">
+          <div>
+            <h1>维词生词工具</h1>
+            <p class="hint">抓取来源：1299172402/weici（docs/2）</p>
+          </div>
+          <div class="toolbar">
+            <button id="loadBtn">加载词库</button>
+            <button id="refreshBtn">强制刷新</button>
+          </div>
         </div>
 
-        <div class="filter-row">
-          <input id="searchInput" placeholder="筛词：输入英文拼写/中文释义/英文释义" />
-          <select id="rangeSelect" aria-label="筛词范围">
-            <option value="all">筛词范围：全部新词</option>
-            <option value="notebook">筛词范围：生词表</option>
-            <option value="phrase">筛词范围：短语</option>
-            <option value="special">筛词范围：特殊词汇</option>
-          </select>
+        <div id="homePanel" class="tile-grid">
+          <button id="showStudyBtn" class="feature-tile active" type="button">
+            <span class="tile-kicker">Tile 01</span>
+            <strong>筛生词</strong>
+            <span>按范围逐张浏览新词卡，加入或跳过。</span>
+          </button>
+          <button id="showNotebookBtn" class="feature-tile" type="button">
+            <span class="tile-kicker">Tile 02</span>
+            <strong>览生词</strong>
+            <span>查看已选生词、清空列表并导出词汇本。</span>
+          </button>
         </div>
 
-        <div id="letterFilters" class="letter-filters"></div>
+        <p id="stats" class="stats-line"></p>
       </section>
 
-      <section class="grid">
-        <article class="card flashcard-panel">
+      <section id="workspace" class="workspace" hidden>
+        <article id="studyPanel" class="card flashcard-panel">
           <div class="flashcard-meta">
-            <h2>筛词卡片</h2>
+            <div class="meta-left">
+              <button id="drawerToggleBtn" class="ghost drawer-toggle" type="button">目录</button>
+              <h2>筛词卡片</h2>
+            </div>
             <p id="progressText" class="hint">准备加载词库...</p>
           </div>
+
+          <aside id="studyDrawer" class="study-drawer" hidden>
+            <div class="drawer-head">
+              <h3>筛词范围</h3>
+              <button id="drawerCloseBtn" class="ghost" type="button">收起</button>
+            </div>
+            <div id="drawerRangeList" class="drawer-range-list"></div>
+          </aside>
 
           <div class="flashcard-wrap">
             <div class="flashcard" id="flashcard">
@@ -51,39 +89,58 @@
             </div>
 
             <div class="flashcard-actions">
+              <button id="backHomeBtn" class="ghost">退出</button>
+              <button id="playAudioBtn" class="ghost">播放发音</button>
               <button id="addBtn">加入生词本</button>
-              <button id="skipBtn" class="ghost">跳过</button>
+              <button id="prevBtn" class="ghost">上一个</button>
+              <button id="nextBtn" class="ghost">下一个</button>
             </div>
 
-            <p class="shortcut-hint">快捷键：`A` 或 `Enter` 加入生词本，`S` 或空格跳过</p>
+            <p class="shortcut-hint">快捷键：`A/Enter` 加入生词本，方向键左右切换，`Esc` 退出</p>
           </div>
         </article>
 
-        <article class="card">
-          <h2>生词本</h2>
-          <p id="selectedCount">已选 0 个单词</p>
-          <div class="toolbar compact">
-            <button id="clearSelectedBtn" class="ghost">清空生词本</button>
+        <article id="notebookPanel" class="card notebook-panel" hidden>
+          <div class="flashcard-meta">
+            <h2>览生词卡片</h2>
+            <p id="selectedCount">已选 0 个单词</p>
           </div>
 
-          <div class="export-box">
-            <label for="modeSelect">导出模式</label>
-            <select id="modeSelect">
-              <option value="zh">仅中文释义</option>
-              <option value="bilingual" selected>中英双释义</option>
-              <option value="en">纯英文</option>
-            </select>
+          <div class="flashcard-wrap">
+            <div class="flashcard" id="notebookFlashcard">
+              <p id="notebookEmptyState" class="empty-state">当前处于生词本模式，但生词本里还没有单词。</p>
 
-            <label for="typeSelect">导出格式</label>
-            <select id="typeSelect">
-              <option value="docx" selected>DOCX 文档</option>
-              <option value="txt">TXT 文本</option>
-            </select>
+              <div id="notebookCardContent" class="card-content" hidden>
+                <p id="notebookCategory" class="card-category"></p>
+                <h3 id="notebookWord" class="card-word"></h3>
+                <p id="notebookIpa" class="card-ipa"></p>
+                <div id="notebookMeanings" class="card-meanings"></div>
+              </div>
+            </div>
 
-            <button id="exportBtn">生成词汇本文件</button>
+            <div class="flashcard-actions">
+              <button id="notebookExitBtn" class="ghost">退出</button>
+              <button id="notebookPlayAudioBtn" class="ghost">播放发音</button>
+              <button id="removeBtn" class="ghost">去除生词本</button>
+              <button id="notebookPrevBtn" class="ghost">上一个</button>
+              <button id="notebookNextBtn" class="ghost">下一个</button>
+            </div>
+
+            <div class="export-box compact-export">
+              <select id="modeSelect" aria-label="导出模式">
+                <option value="zh">仅中文释义</option>
+                <option value="bilingual" selected>中英双释义</option>
+                <option value="en">纯英文</option>
+              </select>
+
+              <select id="typeSelect" aria-label="导出格式">
+                <option value="docx" selected>DOCX 文档</option>
+                <option value="txt">TXT 文本</option>
+              </select>
+
+              <button id="exportBtn">导出词汇本</button>
+            </div>
           </div>
-
-          <ul id="selectedList" class="selected-list"></ul>
         </article>
       </section>
     </main>
