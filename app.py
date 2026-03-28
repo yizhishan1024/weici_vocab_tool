@@ -415,7 +415,7 @@ def api_export():
         return jsonify({"error": "生词表为空，请先添加单词。"}), 400
 
     rows = []
-    for i, item in enumerate(entries, start=1):
+    for item in entries:
         word = (item.get("word") or "").strip()
         ipa = (item.get("ipa") or item.get("ipa_us") or item.get("ipa_uk") or "").strip()
         pos = (item.get("pos") or "").strip()
@@ -425,10 +425,10 @@ def api_export():
 
         meaning = build_export_meaning(item, mode)
 
-        line = f"{i}. {word}"
-        if pos:
+        line = word
+        if mode != "word" and pos:
             line += f" ({pos})"
-        if ipa:
+        if mode != "word" and ipa:
             line += f" [{ipa}]"
         if meaning:
             line += f" - {meaning}"
@@ -444,8 +444,6 @@ def api_export():
             return jsonify({"error": "未安装 python-docx，无法导出 docx。请先 pip install -r requirements.txt"}), 500
 
         doc = Document()
-        doc.add_heading("维词生词本", level=1)
-        doc.add_paragraph(f"导出时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         for row in rows:
             doc.add_paragraph(row)
 

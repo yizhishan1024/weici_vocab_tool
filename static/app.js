@@ -29,6 +29,7 @@ const STUDY_RANGES = [
   { value: "special", label: "特殊词汇" },
   ...Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map((letter) => ({ value: letter, label: letter })),
 ];
+const EXPORT_CATEGORY_OPTIONS = STUDY_RANGES.filter((item) => item.value !== "all");
 
 const $ = (id) => document.getElementById(id);
 
@@ -139,6 +140,11 @@ function getAudioMimeType(audioUrl) {
 function getCategoryLabel(category) {
   if (CATEGORY_LABELS[category]) return CATEGORY_LABELS[category];
   return category || "新词";
+}
+
+function getSelectedExportCategories() {
+  const selected = Array.from(document.querySelectorAll('input[name="exportCategory"]:checked'));
+  return selected.map((input) => input.value);
 }
 
 async function saveSelected() {
@@ -263,6 +269,34 @@ function renderView() {
 function renderSettings() {
   $("autoPlayToggle").checked = state.autoPlayAudio;
   $("hideMeaningsToggle").checked = state.hideMeanings;
+}
+
+function renderExportControls() {
+  const source = $("exportSourceSelect").value;
+  $("exportCategoryPanel").hidden = source !== "categories";
+}
+
+function renderExportCategories() {
+  const container = $("exportCategoryList");
+  container.innerHTML = "";
+
+  for (const item of EXPORT_CATEGORY_OPTIONS) {
+    const label = document.createElement("label");
+    label.className = "export-category-item";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "exportCategory";
+    input.value = item.value;
+    input.checked = true;
+
+    const text = document.createElement("span");
+    text.textContent = item.label;
+
+    label.appendChild(input);
+    label.appendChild(text);
+    container.appendChild(label);
+  }
 }
 
 function renderDrawer() {
@@ -571,9 +605,14 @@ async function loadWords(refresh = false) {
 }
 
 async function exportNotebook() {
-  const entries = getNotebookWords();
+  const source = $("exportSourceSelect").value;
+  const selectedCategories = getSelectedExportCategories();
+  const entries = source === "categories"
+    ? state.words.filter((item) => selectedCategories.includes(item.category))
+    : getNotebookWords();
+
   if (!entries.length) {
-    alert("请先加入生词。");
+    alert(source === "categories" ? "请先选择至少一个类别并确保词库已加载。" : "请先加入生词。");
     return;
   }
 
@@ -678,6 +717,17 @@ function setupEvents() {
   $("notebookPlayAudioBtn").addEventListener("click", () => playWordAudio(getCurrentNotebookWord()));
   $("notebookPrevBtn").addEventListener("click", () => moveNotebook(-1));
   $("notebookNextBtn").addEventListener("click", () => moveNotebook(1));
+  $("exportSourceSelect").addEventListener("change", renderExportControls);
+  $("exportSelectAllBtn").addEventListener("click", () => {
+    document.querySelectorAll('input[name="exportCategory"]').forEach((input) => {
+      input.checked = true;
+    });
+  });
+  $("exportClearBtn").addEventListener("click", () => {
+    document.querySelectorAll('input[name="exportCategory"]').forEach((input) => {
+      input.checked = false;
+    });
+  });
 
   $("exportBtn").addEventListener("click", () => exportNotebook().catch((e) => alert(e.message)));
 
@@ -732,6 +782,8 @@ setupEvents();
 loadSettings();
 renderToday();
 warmupSpeech();
+renderExportCategories();
+renderExportControls();
 renderActiveView();
 Promise.resolve()
   .then(() => loadNotebook())

@@ -144,6 +144,11 @@
             </div>
 
             <div class="export-box compact-export">
+              <select id="exportSourceSelect" aria-label="导出来源">
+                <option value="notebook" selected>导出生词本</option>
+                <option value="categories">按类别导出</option>
+              </select>
+
               <select id="modeSelect" aria-label="导出模式">
                 <option value="word">只含单词</option>
                 <option value="zh">仅中文释义</option>
@@ -157,6 +162,17 @@
               </select>
 
               <button id="exportBtn">导出词汇本</button>
+            </div>
+
+            <div id="exportCategoryPanel" class="export-category-panel" hidden>
+              <div class="export-category-head">
+                <strong>类别词表</strong>
+                <div class="export-category-actions">
+                  <button id="exportSelectAllBtn" class="ghost" type="button">全选</button>
+                  <button id="exportClearBtn" class="ghost" type="button">清空</button>
+                </div>
+              </div>
+              <div id="exportCategoryList" class="export-category-list"></div>
             </div>
           </div>
         </article>
