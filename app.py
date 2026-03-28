@@ -114,6 +114,9 @@ def aggregate_words(words: List[WordEntry]) -> list[dict]:
 
 
 def build_export_meaning(item: dict, mode: str) -> str:
+    if mode == "word":
+        return ""
+
     meanings = item.get("meanings") or []
     if meanings:
         parts = []
@@ -123,7 +126,7 @@ def build_export_meaning(item: dict, mode: str) -> str:
             en = trim_meaning(meaning.get("en") or "")
 
             if mode == "en":
-                body = en or zh
+                body = en
             elif mode == "bilingual":
                 body = f"{zh} / {en}" if zh and en else (zh or en)
             else:
@@ -137,9 +140,11 @@ def build_export_meaning(item: dict, mode: str) -> str:
     zh = trim_meaning(item.get("first_zh") or "")
     en = trim_meaning(item.get("first_en") or "")
     if mode == "en":
-        return en or zh
+        return en
     if mode == "bilingual":
         return f"{zh} / {en}" if zh and en else (zh or en)
+    if mode == "word":
+        return ""
     return zh or en
 
 

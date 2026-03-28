@@ -11,6 +11,7 @@ const state = {
   settingsOpen: false,
   autoPlayAudio: true,
   hideMeanings: false,
+  currentAudio: null,
   preferredVoice: null,
 };
 
@@ -355,6 +356,7 @@ function renderMeaningBlock(containerId, word) {
 
 function playWordAudio(word) {
   if (!word) return;
+  stopAudioPlayback();
   const originalAudioUrl = getAudio(word);
   const audioUrl = getPlayableAudioUrl(word);
   if (audioUrl) {
@@ -365,17 +367,34 @@ function playWordAudio(word) {
       return;
     }
     const audio = new Audio(audioUrl);
+    state.currentAudio = audio;
     audio.preload = "auto";
     audio.playsInline = true;
+    audio.addEventListener("ended", () => {
+      if (state.currentAudio === audio) state.currentAudio = null;
+    }, { once: true });
     audio.addEventListener("error", () => {
+      if (state.currentAudio === audio) state.currentAudio = null;
       speakFallback(word.word);
     }, { once: true });
     audio.play().catch(() => {
+      if (state.currentAudio === audio) state.currentAudio = null;
       speakFallback(word.word);
     });
     return;
   }
   speakFallback(word.word);
+}
+
+function stopAudioPlayback() {
+  if (state.currentAudio) {
+    state.currentAudio.pause();
+    state.currentAudio.currentTime = 0;
+    state.currentAudio = null;
+  }
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
 }
 
 function maybeAutoPlay(word) {
@@ -586,6 +605,9 @@ async function exportNotebook() {
 }
 
 function enterView(view) {
+  if (view === "home") {
+    stopAudioPlayback();
+  }
   state.activeView = view;
   if (view === "study") {
     state.studyIndex = 0;
@@ -595,6 +617,7 @@ function enterView(view) {
     state.drawerOpen = false;
   }
   renderActiveView();
+  if (view === "home") return;
   const current = view === "study" ? getCurrentStudyWord() : getCurrentNotebookWord();
   maybeAutoPlay(current);
 }
