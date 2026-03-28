@@ -209,6 +209,28 @@ h2 {
 .stats-line {
   margin: 16px 0 0;
   color: var(--muted);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.stats-line[data-status="loading"] {
+  color: #0f766e;
+  background: rgba(204, 251, 241, 0.8);
+  border-color: rgba(94, 234, 212, 0.55);
+}
+
+.stats-line[data-status="success"] {
+  color: #166534;
+  background: rgba(220, 252, 231, 0.82);
+  border-color: rgba(134, 239, 172, 0.6);
+}
+
+.stats-line[data-status="error"] {
+  color: #b91c1c;
+  background: rgba(254, 226, 226, 0.86);
+  border-color: rgba(252, 165, 165, 0.62);
 }
 
 .toolbar {

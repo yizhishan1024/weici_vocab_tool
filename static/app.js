@@ -37,6 +37,15 @@ function renderStats(text) {
   $("stats").textContent = text;
 }
 
+function renderLoadState(status, text) {
+  $("stats").textContent = text;
+  $("stats").dataset.status = status;
+
+  if (state.activeView === "study") {
+    $("progressText").textContent = text;
+  }
+}
+
 function renderToday() {
   const now = new Date();
   $("todayText").textContent = now.toLocaleDateString("zh-CN", {
@@ -580,7 +589,7 @@ function removeCurrentWord() {
 }
 
 async function loadWords(refresh = false) {
-  renderStats("正在加载本地词库，请稍候...");
+  renderLoadState("loading", "词库加载中，请稍候...");
   const resp = await fetch(`/api/words${refresh ? "?refresh=1" : ""}`);
   if (!resp.ok) throw new Error("词库加载失败");
 
@@ -600,7 +609,7 @@ async function loadWords(refresh = false) {
 
   state.studyIndex = 0;
   state.notebookIndex = 0;
-  renderStats(`本地词库 ${data.count} 条，原始词条 ${data.raw_count || data.count} 条，更新时间：${data.updated_at || "未知"}`);
+  renderLoadState("success", `词库已加载：${data.count} 条可用词，原始词条 ${data.raw_count || data.count} 条，更新时间：${data.updated_at || "未知"}`);
   renderActiveView();
 }
 
@@ -789,6 +798,6 @@ Promise.resolve()
   .then(() => loadNotebook())
   .then(() => loadWords(false))
   .catch((e) => {
-    renderStats("词库或生词本加载失败，请稍后重试");
+    renderLoadState("error", "词库加载失败，请点击“加载词库”或“强制刷新”重试");
     alert(e.message);
   });
