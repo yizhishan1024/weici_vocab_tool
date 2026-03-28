@@ -27,6 +27,14 @@
         </div>
         <input id="autoPlayToggle" type="checkbox" />
       </label>
+
+      <label class="settings-option" for="hideMeaningsToggle">
+        <div>
+          <strong>关闭释义</strong>
+          <p>开启后卡片只显示单词和音标，不显示中文和英文释义。</p>
+        </div>
+        <input id="hideMeaningsToggle" type="checkbox" />
+      </label>
     </aside>
 
     <main class="container">
@@ -74,6 +82,14 @@
               <button id="drawerCloseBtn" class="ghost" type="button">收起</button>
             </div>
             <div id="drawerRangeList" class="drawer-range-list"></div>
+
+            <div class="drawer-bookmarks">
+              <div class="drawer-subhead">
+                <h3>书签</h3>
+                <button id="bookmarkCurrentBtn" class="ghost" type="button">添加当前书签</button>
+              </div>
+              <div id="bookmarkList" class="bookmark-list"></div>
+            </div>
           </aside>
 
           <div class="flashcard-wrap">
@@ -91,19 +107,20 @@
             <div class="flashcard-actions">
               <button id="backHomeBtn" class="ghost">退出</button>
               <button id="playAudioBtn" class="ghost">播放发音</button>
+              <button id="bookmarkBtn" class="ghost">添加书签</button>
               <button id="addBtn">加入生词本</button>
               <button id="prevBtn" class="ghost">上一个</button>
               <button id="nextBtn" class="ghost">下一个</button>
             </div>
 
-            <p class="shortcut-hint">快捷键：`A/Enter` 加入生词本，方向键左右切换，`Esc` 退出</p>
+            <p class="shortcut-hint">快捷键：`A/Enter` 加入生词本，`B` 添加书签，方向键左右切换，`Esc` 退出</p>
           </div>
         </article>
 
         <article id="notebookPanel" class="card notebook-panel" hidden>
           <div class="flashcard-meta">
             <h2>览生词卡片</h2>
-            <p id="selectedCount">已选 0 个单词</p>
+            <p id="selectedCount" hidden>已选 0 个单词</p>
           </div>
 
           <div class="flashcard-wrap">

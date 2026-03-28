@@ -10,9 +10,10 @@ import os
 from pathlib import Path
 import time
 from typing import List
+from urllib.parse import quote, unquote, urlparse
 
 import requests
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 try:
     from docx import Document
@@ -26,6 +27,7 @@ NOTEBOOK_DIR = DATA_DIR / "notebook"
 NOTEBOOK_PATH = NOTEBOOK_DIR / "selected_words.json"
 
 RAW_BASE = "https://raw.githubusercontent.com/1299172402/weici/master/docs/2"
+PAGES_MEDIA_BASE = "https://1299172402.github.io/weici/media"
 SOURCE_FILES = [f"weici_{ch}.md" for ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"] + ["weici_phrase.md"]
 
 app = Flask(__name__)
@@ -279,10 +281,57 @@ def build_audio_url(src: str) -> str:
     if not cleaned:
         return ""
     if cleaned.startswith("http://") or cleaned.startswith("https://"):
-        return cleaned
+        parsed = urlparse(cleaned)
+        if parsed.netloc == "raw.githubusercontent.com" and parsed.path.startswith("/1299172402/weici/master/docs/2/media/"):
+            media_name = quote(unquote(parsed.path.rsplit("/", 1)[-1]), safe="")
+            return f"{PAGES_MEDIA_BASE}/{media_name}"
+        if parsed.netloc == "1299172402.github.io" and parsed.path.startswith("/weici/media/"):
+            media_name = quote(unquote(parsed.path.rsplit("/", 1)[-1]), safe="")
+            return f"{PAGES_MEDIA_BASE}/{media_name}"
+        encoded_path = quote(unquote(parsed.path), safe="/")
+        return parsed._replace(path=encoded_path).geturl()
     if cleaned.startswith("./"):
         cleaned = cleaned[2:]
-    return f"https://raw.githubusercontent.com/1299172402/weici/master/docs/2/{cleaned}"
+    if cleaned.startswith("media/"):
+        media_name = quote(unquote(cleaned.rsplit("/", 1)[-1]), safe="")
+        return f"{PAGES_MEDIA_BASE}/{media_name}"
+    encoded = quote(cleaned, safe="/")
+    return f"{RAW_BASE}/{encoded}"
+
+
+def guess_audio_mimetype(url: str) -> str:
+    path = urlparse(url).path.lower()
+    if path.endswith(".mp3"):
+        return "audio/mpeg"
+    if path.endswith(".m4a"):
+        return "audio/mp4"
+    if path.endswith(".aac"):
+        return "audio/aac"
+    if path.endswith(".wav"):
+        return "audio/wav"
+    if path.endswith(".ogg"):
+        return "audio/ogg"
+    return "application/octet-stream"
+
+
+def sanitize_audio_source(url: str) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    if parsed.netloc == "raw.githubusercontent.com" and parsed.path.startswith("/1299172402/weici/master/docs/2/media/"):
+        media_name = quote(unquote(parsed.path.rsplit("/", 1)[-1]), safe="")
+        return f"{PAGES_MEDIA_BASE}/{media_name}"
+    if parsed.netloc == "1299172402.github.io" and parsed.path.startswith("/weici/media/"):
+        media_name = quote(unquote(parsed.path.rsplit("/", 1)[-1]), safe="")
+        return f"{PAGES_MEDIA_BASE}/{media_name}"
+    if parsed.netloc != "raw.githubusercontent.com":
+        return None
+    if not parsed.path.startswith("/1299172402/weici/master/docs/2/"):
+        return None
+    encoded_path = quote(unquote(parsed.path), safe="/")
+    return parsed._replace(path=encoded_path).geturl()
 
 
 def _download_and_parse() -> List[WordEntry]:
@@ -443,6 +492,30 @@ def api_export():
         as_attachment=True,
         download_name=filename,
         mimetype=mime,
+    )
+
+
+@app.get("/api/audio")
+def api_audio():
+    src = request.args.get("src", "")
+    url = sanitize_audio_source(src)
+    if not url:
+        return jsonify({"error": "无效的音频地址"}), 400
+
+    try:
+        upstream = requests.get(url, timeout=30)
+        upstream.raise_for_status()
+    except requests.RequestException:
+        return jsonify({"error": "音频获取失败"}), 502
+
+    mimetype = upstream.headers.get("Content-Type") or guess_audio_mimetype(url)
+    return Response(
+        upstream.content,
+        mimetype=mimetype,
+        headers={
+            "Cache-Control": "public, max-age=86400",
+            "Accept-Ranges": "bytes",
+        },
     )
 
 

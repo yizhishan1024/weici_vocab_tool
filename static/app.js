@@ -10,10 +10,12 @@ const state = {
   drawerOpen: false,
   settingsOpen: false,
   autoPlayAudio: true,
+  hideMeanings: false,
   preferredVoice: null,
 };
 
 const SETTINGS_STORAGE_KEY = "weici_settings_v1";
+const BOOKMARKS_STORAGE_KEY = "weici_bookmarks_v1";
 
 const CATEGORY_LABELS = {
   phrase: "短语",
@@ -50,6 +52,9 @@ function loadSettings() {
     if (typeof parsed.autoPlayAudio === "boolean") {
       state.autoPlayAudio = parsed.autoPlayAudio;
     }
+    if (typeof parsed.hideMeanings === "boolean") {
+      state.hideMeanings = parsed.hideMeanings;
+    }
   } catch (_) {
     // no-op
   }
@@ -61,8 +66,28 @@ function saveSettings() {
       SETTINGS_STORAGE_KEY,
       JSON.stringify({
         autoPlayAudio: state.autoPlayAudio,
+        hideMeanings: state.hideMeanings,
       }),
     );
+  } catch (_) {
+    // no-op
+  }
+}
+
+function loadBookmarks() {
+  try {
+    const raw = window.localStorage.getItem(BOOKMARKS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => item && item.word) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveBookmarks(bookmarks) {
+  try {
+    window.localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify(bookmarks));
   } catch (_) {
     // no-op
   }
@@ -82,6 +107,23 @@ function getIpa(word) {
 
 function getAudio(word) {
   return word.audio || word.audio_us || word.audio_uk || "";
+}
+
+function getPlayableAudioUrl(word) {
+  const audioUrl = getAudio(word);
+  if (!audioUrl) return "";
+  return `/api/audio?src=${encodeURIComponent(audioUrl)}`;
+}
+
+function getAudioMimeType(audioUrl) {
+  if (!audioUrl) return "";
+  const cleanUrl = audioUrl.split("?")[0].toLowerCase();
+  if (cleanUrl.endsWith(".mp3")) return "audio/mpeg";
+  if (cleanUrl.endsWith(".m4a")) return "audio/mp4";
+  if (cleanUrl.endsWith(".aac")) return "audio/aac";
+  if (cleanUrl.endsWith(".wav")) return "audio/wav";
+  if (cleanUrl.endsWith(".ogg")) return "audio/ogg";
+  return "";
 }
 
 function getCategoryLabel(category) {
@@ -132,6 +174,52 @@ function getCurrentNotebookWord() {
   return words[state.notebookIndex];
 }
 
+function getBookmarks() {
+  return loadBookmarks();
+}
+
+function addBookmark() {
+  const current = getCurrentStudyWord();
+  if (!current) return;
+
+  const bookmarks = getBookmarks();
+  const existingIndex = bookmarks.findIndex((item) => item.word === current.word && item.range === state.studyRange);
+  const payload = {
+    id: `${Date.now()}-${current.word}`,
+    word: current.word,
+    range: state.studyRange,
+    category: current.category,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (existingIndex >= 0) {
+    bookmarks[existingIndex] = { ...bookmarks[existingIndex], ...payload, id: bookmarks[existingIndex].id };
+  } else {
+    bookmarks.unshift(payload);
+  }
+
+  saveBookmarks(bookmarks.slice(0, 30));
+  renderDrawer();
+}
+
+function jumpToBookmark(bookmark) {
+  if (!bookmark) return;
+  state.studyRange = bookmark.range || "all";
+  const words = getStudyWords();
+  const foundIndex = words.findIndex((item) => item.word === bookmark.word);
+  state.studyIndex = foundIndex >= 0 ? foundIndex : 0;
+  state.activeView = "study";
+  state.drawerOpen = false;
+  renderActiveView();
+  maybeAutoPlay(getCurrentStudyWord());
+}
+
+function removeBookmark(bookmarkId) {
+  const bookmarks = getBookmarks().filter((item) => item.id !== bookmarkId);
+  saveBookmarks(bookmarks);
+  renderDrawer();
+}
+
 function renderView() {
   const isHome = state.activeView === "home";
   const isStudy = state.activeView === "study";
@@ -139,6 +227,7 @@ function renderView() {
   const enteringImmersive = state.lastView === "home" && !isHome;
 
   document.body.classList.toggle("immersive-mode", !isHome);
+  document.body.classList.toggle("hide-meanings", state.hideMeanings);
   $("homePanel").hidden = !isHome;
   $("workspace").hidden = isHome;
   $("studyPanel").hidden = !isStudy;
@@ -163,11 +252,14 @@ function renderView() {
 
 function renderSettings() {
   $("autoPlayToggle").checked = state.autoPlayAudio;
+  $("hideMeaningsToggle").checked = state.hideMeanings;
 }
 
 function renderDrawer() {
   const container = $("drawerRangeList");
+  const bookmarkContainer = $("bookmarkList");
   container.innerHTML = "";
+  bookmarkContainer.innerHTML = "";
 
   for (const item of STUDY_RANGES) {
     const btn = document.createElement("button");
@@ -182,6 +274,40 @@ function renderDrawer() {
       maybeAutoPlay(getCurrentStudyWord());
     });
     container.appendChild(btn);
+  }
+
+  const bookmarks = getBookmarks();
+  if (!bookmarks.length) {
+    const empty = document.createElement("p");
+    empty.className = "bookmark-empty";
+    empty.textContent = "还没有书签。";
+    bookmarkContainer.appendChild(empty);
+    return;
+  }
+
+  for (const item of bookmarks) {
+    const row = document.createElement("div");
+    row.className = "bookmark-item";
+
+    const jumpBtn = document.createElement("button");
+    jumpBtn.type = "button";
+    jumpBtn.className = "bookmark-jump";
+    jumpBtn.innerHTML = `<strong>${item.word}</strong><span>${STUDY_RANGES.find((range) => range.value === item.range)?.label || "全部新词"}</span>`;
+    jumpBtn.addEventListener("click", () => {
+      jumpToBookmark(item);
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "ghost bookmark-remove";
+    removeBtn.textContent = "删除";
+    removeBtn.addEventListener("click", () => {
+      removeBookmark(item.id);
+    });
+
+    row.appendChild(jumpBtn);
+    row.appendChild(removeBtn);
+    bookmarkContainer.appendChild(row);
   }
 }
 
@@ -229,9 +355,21 @@ function renderMeaningBlock(containerId, word) {
 
 function playWordAudio(word) {
   if (!word) return;
-  const audioUrl = getAudio(word);
+  const originalAudioUrl = getAudio(word);
+  const audioUrl = getPlayableAudioUrl(word);
   if (audioUrl) {
+    const mimeType = getAudioMimeType(originalAudioUrl);
+    const probe = document.createElement("audio");
+    if (mimeType && typeof probe.canPlayType === "function" && !probe.canPlayType(mimeType)) {
+      speakFallback(word.word);
+      return;
+    }
     const audio = new Audio(audioUrl);
+    audio.preload = "auto";
+    audio.playsInline = true;
+    audio.addEventListener("error", () => {
+      speakFallback(word.word);
+    }, { once: true });
     audio.play().catch(() => {
       speakFallback(word.word);
     });
@@ -286,8 +424,10 @@ function renderStudyCard() {
   $("progressText").textContent = words.length ? `${rangeLabel} · 当前第 ${state.studyIndex + 1} / ${words.length} 个` : `${rangeLabel} · 当前没有可显示的新词`;
   $("emptyState").hidden = Boolean(current);
   $("cardContent").hidden = !current;
+  $("cardMeanings").hidden = !current || state.hideMeanings;
   $("addBtn").disabled = !current || state.selectedMap.has(current.word);
-  $("playAudioBtn").disabled = !current || !getAudio(current);
+  $("bookmarkBtn").disabled = !current;
+  $("playAudioBtn").disabled = !current;
   $("prevBtn").disabled = !current;
   $("nextBtn").disabled = !current;
 
@@ -296,7 +436,9 @@ function renderStudyCard() {
   $("cardCategory").textContent = getCategoryLabel(current.category);
   $("cardWord").textContent = current.word;
   $("cardIpa").textContent = getIpa(current) ? `[${getIpa(current)}]` : "暂无音标";
-  renderMeaningBlock("cardMeanings", current);
+  if (!state.hideMeanings) {
+    renderMeaningBlock("cardMeanings", current);
+  }
 }
 
 function renderNotebookCard() {
@@ -305,18 +447,21 @@ function renderNotebookCard() {
   $("selectedCount").textContent = words.length ? `已选 ${words.length} 个单词 · 当前第 ${state.notebookIndex + 1} / ${words.length} 个` : "生词本为空";
   $("notebookEmptyState").hidden = Boolean(current);
   $("notebookCardContent").hidden = !current;
+  $("notebookMeanings").hidden = !current || state.hideMeanings;
   $("removeBtn").disabled = !current;
-  $("notebookPlayAudioBtn").disabled = !current || !getAudio(current);
+  $("notebookPlayAudioBtn").disabled = !current;
   $("notebookPrevBtn").disabled = !current;
   $("notebookNextBtn").disabled = !current;
   $("exportBtn").disabled = !words.length;
 
   if (!current) return;
 
-  $("notebookCategory").textContent = `生词本模式 · ${getCategoryLabel(current.category)}`;
+  $("notebookCategory").textContent = `生词本模式 · ${getCategoryLabel(current.category)} · ${state.notebookIndex + 1}/${words.length}`;
   $("notebookWord").textContent = current.word;
   $("notebookIpa").textContent = getIpa(current) ? `[${getIpa(current)}]` : "暂无音标";
-  renderMeaningBlock("notebookMeanings", current);
+  if (!state.hideMeanings) {
+    renderMeaningBlock("notebookMeanings", current);
+  }
 }
 
 function renderActiveView() {
@@ -484,7 +629,14 @@ function setupEvents() {
     saveSettings();
     renderSettings();
   });
+  $("hideMeaningsToggle").addEventListener("change", (event) => {
+    state.hideMeanings = event.target.checked;
+    saveSettings();
+    renderActiveView();
+  });
 
+  $("bookmarkCurrentBtn").addEventListener("click", addBookmark);
+  $("bookmarkBtn").addEventListener("click", addBookmark);
   $("addBtn").addEventListener("click", addCurrentWord);
   $("playAudioBtn").addEventListener("click", () => playWordAudio(getCurrentStudyWord()));
   $("prevBtn").addEventListener("click", () => moveStudy(-1));
@@ -519,6 +671,9 @@ function setupEvents() {
       } else if (event.key === "a" || event.key === "A" || event.key === "Enter") {
         event.preventDefault();
         addCurrentWord();
+      } else if (event.key === "b" || event.key === "B") {
+        event.preventDefault();
+        addBookmark();
       } else if (event.key === "ArrowLeft") {
         event.preventDefault();
         moveStudy(-1);

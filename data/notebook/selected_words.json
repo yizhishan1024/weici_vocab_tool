@@ -1,5 +1,95 @@
 {
-  "updated_at": "2026-03-28T12:18:07",
-  "count": 0,
-  "entries": []
+  "updated_at": "2026-03-28T14:00:15",
+  "count": 4,
+  "entries": [
+    {
+      "audio": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/baby.aac",
+      "audio_uk": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/baby-B.aac",
+      "audio_us": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/baby.aac",
+      "category": "B",
+      "first_en": "",
+      "first_zh": "婴儿；幼小的动物",
+      "ipa": "'beɪbi",
+      "ipa_uk": "'beɪbi",
+      "ipa_us": "'beɪbi",
+      "meanings": [
+        {
+          "en": "",
+          "pos": "n",
+          "zh": "婴儿；幼小的动物"
+        }
+      ],
+      "pos": "n",
+      "source_path": "weici_B.md",
+      "word": "baby"
+    },
+    {
+      "audio": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/baby-faced2_AAC.aac",
+      "audio_uk": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/baby-faced1_AAC.aac",
+      "audio_us": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/baby-faced2_AAC.aac",
+      "category": "B",
+      "first_en": "",
+      "first_zh": "娃娃脸的",
+      "ipa": "",
+      "ipa_uk": "",
+      "ipa_us": "",
+      "meanings": [
+        {
+          "en": "",
+          "pos": "adj",
+          "zh": "娃娃脸的"
+        }
+      ],
+      "pos": "adj",
+      "source_path": "weici_B.md",
+      "word": "baby-faced"
+    },
+    {
+      "audio": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/bachelor.aac",
+      "audio_uk": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/bachelor-B.aac",
+      "audio_us": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/bachelor.aac",
+      "category": "B",
+      "first_en": "",
+      "first_zh": "学士 (学位)",
+      "ipa": "'bætʃələr",
+      "ipa_uk": "'bætʃələ(r)",
+      "ipa_us": "'bætʃələr",
+      "meanings": [
+        {
+          "en": "",
+          "pos": "n",
+          "zh": "学士 (学位)"
+        }
+      ],
+      "pos": "n",
+      "source_path": "weici_B.md",
+      "word": "bachelor"
+    },
+    {
+      "audio": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/back.aac",
+      "audio_uk": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/back-B.aac",
+      "audio_us": "https://raw.githubusercontent.com/1299172402/weici/master/docs/2/media/back.aac",
+      "category": "B",
+      "first_en": "",
+      "first_zh": "背 (部)；脊柱",
+      "ipa": "bæk",
+      "ipa_uk": "bæk",
+      "ipa_us": "bæk",
+      "meanings": [
+        {
+          "en": "",
+          "pos": "n",
+          "zh": "背 (部)；脊柱"
+        },
+        {
+          "en": "",
+          "pos": "v",
+          "zh": "vt & vi (使) 后退"
+        }
+      ],
+      "pos": "n / v",
+      "source_path": "weici_B.md",
+      "word": "back"
+    }
+  ]
 }
