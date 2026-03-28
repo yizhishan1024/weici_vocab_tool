@@ -17,6 +17,7 @@ const state = {
 
 const SETTINGS_STORAGE_KEY = "weici_settings_v1";
 const BOOKMARKS_STORAGE_KEY = "weici_bookmarks_v1";
+const NOTEBOOK_STORAGE_KEY = "weici_notebook_v1";
 
 const CATEGORY_LABELS = {
   phrase: "短语",
@@ -94,6 +95,14 @@ function saveBookmarks(bookmarks) {
   }
 }
 
+function saveNotebookToStorage(entries) {
+  try {
+    window.localStorage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify(entries));
+  } catch (_) {
+    // no-op
+  }
+}
+
 function normalizeWord(word) {
   if (!word || !word.word) return null;
   return {
@@ -134,18 +143,18 @@ function getCategoryLabel(category) {
 
 async function saveSelected() {
   const entries = [...state.notebookEntries];
-  await fetch("/api/notebook", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entries }),
-  });
+  saveNotebookToStorage(entries);
 }
 
 async function loadNotebook() {
-  const resp = await fetch("/api/notebook");
-  if (!resp.ok) throw new Error("生词本加载失败");
-  const data = await resp.json();
-  const items = (data.entries || []).map(normalizeWord).filter(Boolean);
+  let items = [];
+  try {
+    const raw = window.localStorage.getItem(NOTEBOOK_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    items = (Array.isArray(parsed) ? parsed : []).map(normalizeWord).filter(Boolean);
+  } catch (_) {
+    items = [];
+  }
   state.notebookEntries = items;
   state.selectedMap = new Map(items.map((item) => [item.word, item]));
 }

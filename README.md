@@ -27,6 +27,20 @@ cd /Users/andy/Documents/weici_vocab_tool
 bash start.sh
 ```
 
+本机一键提交并推送更新：
+```bash
+cd /Users/andy/Documents/weici_vocab_tool
+./push_update.sh "这次更新说明"
+```
+
+服务器一键拉取并安装依赖：
+```bash
+cd ~/weici_vocab_tool
+./deploy_update.sh
+```
+
+执行完 `./deploy_update.sh` 后，再去 PythonAnywhere 的 `Web` 页面点一次 `Reload`。
+
 `start.sh` 会自动打开浏览器访问本地页面。
 
 启动脚本的工作原理见：

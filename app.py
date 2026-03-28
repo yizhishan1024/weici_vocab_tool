@@ -23,8 +23,6 @@ except Exception:  # pragma: no cover
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 CACHE_PATH = DATA_DIR / "words_cache.json"
-NOTEBOOK_DIR = DATA_DIR / "notebook"
-NOTEBOOK_PATH = NOTEBOOK_DIR / "selected_words.json"
 
 RAW_BASE = "https://raw.githubusercontent.com/1299172402/weici/master/docs/2"
 PAGES_MEDIA_BASE = "https://1299172402.github.io/weici/media"
@@ -362,26 +360,6 @@ def _write_cache(words: List[WordEntry]) -> None:
     CACHE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _load_notebook() -> list[dict]:
-    NOTEBOOK_DIR.mkdir(parents=True, exist_ok=True)
-    if not NOTEBOOK_PATH.exists():
-        NOTEBOOK_PATH.write_text(json.dumps({"entries": []}, ensure_ascii=False, indent=2), encoding="utf-8")
-        return []
-
-    data = json.loads(NOTEBOOK_PATH.read_text(encoding="utf-8"))
-    return data.get("entries", [])
-
-
-def _write_notebook(entries: list[dict]) -> None:
-    NOTEBOOK_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "count": len(entries),
-        "entries": entries,
-    }
-    NOTEBOOK_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
 def _load_cache() -> List[WordEntry]:
     if not CACHE_PATH.exists():
         return []
@@ -424,21 +402,6 @@ def api_words():
             "words": aggregated,
         }
     )
-
-
-@app.get("/api/notebook")
-def api_notebook():
-    entries = _load_notebook()
-    return jsonify({"count": len(entries), "entries": entries})
-
-
-@app.post("/api/notebook")
-def api_notebook_save():
-    payload = request.get_json(force=True, silent=True) or {}
-    entries = payload.get("entries", [])
-    cleaned = [item for item in entries if isinstance(item, dict) and item.get("word")]
-    _write_notebook(cleaned)
-    return jsonify({"count": len(cleaned), "entries": cleaned})
 
 
 @app.post("/api/export")
